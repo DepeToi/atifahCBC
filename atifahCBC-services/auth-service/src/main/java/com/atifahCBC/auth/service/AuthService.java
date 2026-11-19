@@ -1,0 +1,48 @@
+package com.atifahCBC.auth.service;
+
+import com.atifahCBC.auth.dto.LoginRequest;
+import com.atifahCBC.auth.dto.RefreshTokenRequest;
+import com.atifahCBC.auth.dto.RegisterRequest;
+import com.atifahCBC.auth.vo.AuthToken;
+import com.atifahCBC.auth.vo.RegisterResult;
+
+/**
+ * 认证业务接口。
+ *
+ * @author DepeToi
+ * @since 1.0.0
+ */
+public interface AuthService {
+
+    /**
+     * 手机号注册。
+     *
+     * @param request 注册请求
+     * @param idempotencyKey 幂等键，规范 UUID
+     * @return 注册结果，仅包含全局用户 ID
+     */
+    RegisterResult register(RegisterRequest request, String idempotencyKey);
+
+    /**
+     * 手机号密码登录。
+     *
+     * @param request 登录请求
+     * @return 访问令牌与刷新令牌
+     */
+    AuthToken login(LoginRequest request);
+
+    /**
+     * 刷新令牌并轮换。
+     *
+     * @param request 刷新请求
+     * @return 轮换后的令牌
+     */
+    AuthToken refresh(RefreshTokenRequest request);
+
+    /**
+     * 登出并撤销刷新令牌。
+     *
+     * @param request 登出请求
+     */
+    void logout(RefreshTokenRequest request);
+}

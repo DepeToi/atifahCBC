@@ -1,0 +1,52 @@
+# Maven
+target/
+release.properties
+pom.xml.releaseBackup
+pom.xml.tag
+pom.xml.next
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.project
+.classpath
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs（保留 logs/ 目录本身供 Docker bind mount 使用；日志内容仍忽略）
+logs/*
+!logs/.gitkeep
+*.log
+
+# Local environment
+.env
+*.local.yml
+*.local.yaml
+
+# Node / frontend
+node_modules/
+dist/
+.pnpm-store/
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+*.iml
+
+# Runtime data
+data/
+
+# Personal AI preferences (layer 1 in the AI rules layout, not tracked)
+.claude/CLAUDE.md
+CODEBUDDY.local.md
+.codebuddy/CODEBUDDY.md
+.codebuddy/settings.local.json

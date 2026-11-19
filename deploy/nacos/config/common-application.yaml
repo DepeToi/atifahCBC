@@ -1,0 +1,137 @@
+# 业务服务共享配置（Nacos data-id: common-application.yaml, group: ATIFAHCBC_PUBLIC_GROUP）
+# 由各服务通过 spring.config.import 引入。此处仅放各服务完全一致、且与连接 Nacos
+# 本身无关的配置；连接 Nacos 所需的 spring.cloud.nacos.* 与差异化项
+# （端口、应用名、数据源 URL、生产者组）保留在各服务本地 application.yml。
+
+spring:
+  threads:
+    virtual:
+      enabled: true
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX:10}
+      minimum-idle: ${DB_POOL_MIN:2}
+      connection-timeout: ${DB_POOL_TIMEOUT:3000}
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: 0
+      timeout: 3s
+  jackson:
+    time-zone: Asia/Shanghai
+    date-format: yyyy-MM-dd HH:mm:ss
+  cloud:
+    # 排除 Windows 开发机虚拟网卡，避免 Nacos 注册到 172.x 虚拟 IP。
+    # 注意：spring-cloud-commons 按 Java NetworkInterface.getDisplayName()（即驱动描述，
+    # 如 "Hyper-V Virtual Ethernet Adapter"）全串正则匹配，不是控制台里的 "vEthernet (...)" 友好名；
+    # Linux 生产环境无匹配接口，配置无害
+    inetutils:
+      ignored-interfaces:
+        - 'Hyper-V Virtual.*'
+        - 'VMware.*'
+        - 'VirtualBox.*'
+    sentinel:
+      transport:
+        dashboard: ${SENTINEL_DASHBOARD:127.0.0.1:8858}
+      eager: false
+    openfeign:
+      client:
+        config:
+          default:
+            connect-timeout: 2000
+            read-timeout: 5000
+
+mybatis-plus:
+  # 与各服务本地 application.yml 保持同值；Nacos 优先，本地作为回落
+  mapper-locations: classpath*:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: assign_id
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+rocketmq:
+  name-server: ${ROCKETMQ_NAMESRV:127.0.0.1:9876}
+  producer:
+    send-message-timeout: 3000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: never
+  metrics:
+    tags:
+      application: ${spring.application.name:atifahCBC}
+
+atifahCBC:
+  common:
+    # 公共配置装载标记：common-security 的 NacosCommonConfigGuard 据此判断本配置是否真的
+    # 从 Nacos 拉取成功，缺失时服务拒绝启动（防止静默走本地默认值兜底）。
+    config-loaded: true
+  security:
+    jwt:
+      secret: ${JWT_SECRET:atifahCBC-dev-secret-change-me-please-32bytes}
+      issuer: atifahCBC
+      # Access Token 短 TTL；Refresh Token 由 auth-service 单独管理。
+      access-token-ttl: 15m
+  logging:
+    access:
+      enabled: true
+      # 健康检查与错误转发不记录访问日志
+      ignore-paths:
+        - /actuator/
+        - /error
+      # 业务服务在网关之后，remoteIp 通常是网关地址；可按合规要求关闭
+      log-remote-ip: true
+
+logging:
+  file:
+    # 控制台之外同时写文件；文件名带服务名，多服务共用目录也不冲突
+    # 相对路径基于工作目录：JVM 从仓库根启动 → <repo>/logs；Docker 中 WORKDIR=/app → /app/logs
+    name: ${ATIFAHCBC_LOG_DIR:logs}/${spring.application.name}.log
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%X{traceId:-}] [%X{userId:-}] [%t] %logger{40} - %msg%n"
+    # 与 console 保持同格式；Boot 默认 file pattern 会额外带 PID 和 ---
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%X{traceId:-}] [%X{userId:-}] [%t] %logger{40} - %msg%n"
+  structured:
+    # 本地为空走文本 pattern；生产设置 ATIFAHCBC_LOG_FORMAT=logstash 启用 JSON
+    format:
+      console: ${ATIFAHCBC_LOG_FORMAT:}
+      # 与 console 共用开关，避免控制台 JSON、文件仍是文本
+      file: ${ATIFAHCBC_LOG_FORMAT:}
+    json:
+      context:
+        include: true
+      add:
+        service: ${spring.application.name}
+        env: ${APP_ENV:local}
+  logback:
+    rollingpolicy:
+      # 单文件 100MB，按天归档保留 30 个，备份总量上限 5GB
+      max-file-size: ${ATIFAHCBC_LOG_MAX_FILE_SIZE:100MB}
+      max-history: ${ATIFAHCBC_LOG_MAX_HISTORY:30}
+      total-size-cap: ${ATIFAHCBC_LOG_TOTAL_SIZE_CAP:5GB}
+      clean-history-on-start: false
+  level:
+    root: info
+    com.atifahCBC: info
+    # 中间件噪声与敏感数据控制：生产禁止 Mapper DEBUG，避免 SQL 参数进入日志
+    com.alibaba.nacos: warn
+    org.redisson: warn
+    org.apache.rocketmq: warn
+    com.alibaba.csp.sentinel: warn
+    io.seata: warn
+    com.zaxxer.hikari: info
+    org.flywaydb: info

@@ -1,0 +1,38 @@
+server:
+  port: 8090
+  shutdown: graceful
+
+spring:
+  application:
+    name: atifahCBC-admin
+  config:
+    import:
+      - "nacos:common-application.yaml?group=ATIFAHCBC_PUBLIC_GROUP&refreshEnabled=true"
+      - "optional:nacos:${spring.application.name}.yaml?group=ATIFAHCBC_ADMIN_GROUP&refreshEnabled=true"
+  cloud:
+    nacos:
+      server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+      discovery:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:atifahCBC_dev}
+        group: atifahCBC_GROUP
+        username: ${NACOS_USERNAME:}
+        password: ${NACOS_PASSWORD:}
+      config:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:atifahCBC_dev}
+        group: ATIFAHCBC_ADMIN_GROUP
+        file-extension: yaml
+        username: ${NACOS_USERNAME:}
+        password: ${NACOS_PASSWORD:}
+  datasource:
+    url: "jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/atifahCBC_admin?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true"
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:root}
+
+rocketmq:
+  producer:
+    group: atifahCBC-admin-producer
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml

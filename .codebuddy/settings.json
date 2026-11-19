@@ -1,0 +1,52 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(**/id_rsa*)",
+      "Edit(**/.env)",
+      "Bash(*down -v*)",
+      "Bash(*volume rm*)",
+      "Bash(*volume prune*)",
+      "Bash(*system prune*)",
+      "Bash(git clean -fdx*)",
+      "Bash(rm -rf /*)",
+      "Bash(*--no-verify*)"
+    ],
+    "ask": [
+      "Bash(git push*)",
+      "Bash(git reset --hard*)",
+      "Bash(git rebase*)",
+      "Bash(mvn deploy*)",
+      "Bash(docker push*)",
+      "Bash(gh release*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if command -v node >/dev/null 2>&1; then exec node \"$CODEBUDDY_PROJECT_DIR\"/.codebuddy/hooks/guard-bash.js; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "^Write$|^Edit$|^NotebookEdit$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if command -v node >/dev/null 2>&1; then exec node \"$CODEBUDDY_PROJECT_DIR\"/.codebuddy/hooks/validate-config.js; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

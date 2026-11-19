@@ -1,0 +1,193 @@
+server:
+  port: 8080
+  shutdown: graceful
+  http2:
+    enabled: true
+
+spring:
+  application:
+    name: atifahCBC-gateway
+  main:
+    web-application-type: reactive
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  config:
+    import: "optional:nacos:${spring.application.name}.yaml?group=ATIFAHCBC_GATEWAY_GROUP&refreshEnabled=true"
+  cloud:
+    nacos:
+      server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+      discovery:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:atifahCBC_dev}
+        group: atifahCBC_GROUP
+        username: ${NACOS_USERNAME:}
+        password: ${NACOS_PASSWORD:}
+      config:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:atifahCBC_dev}
+        group: ATIFAHCBC_GATEWAY_GROUP
+        file-extension: yaml
+        username: ${NACOS_USERNAME:}
+        password: ${NACOS_PASSWORD:}
+    # 排除 Windows 开发机虚拟网卡，避免 Nacos 注册到 172.x 虚拟 IP。
+    # 注意：spring-cloud-commons 按 Java NetworkInterface.getDisplayName()（即驱动描述，
+    # 如 "Hyper-V Virtual Ethernet Adapter"）全串正则匹配，不是控制台里的 "vEthernet (...)" 友好名；
+    # Linux 生产环境无匹配接口，配置无害
+    inetutils:
+      ignored-interfaces:
+        - 'Hyper-V Virtual.*'
+        - 'VMware.*'
+        - 'VirtualBox.*'
+    # 网关配置 key 命名空间为 spring.cloud.gateway.server.webflux.*（SCG 4.3 起拆分 webflux/webmvc
+    # 双变体，经典 spring.cloud.gateway.* key 已弃用）；新增路由在此追加
+    gateway:
+      server:
+        webflux:
+          discovery:
+            locator:
+              enabled: false
+          httpclient:
+            # 下游连接与响应超时，避免挂起的服务长期占用连接
+            connect-timeout: 2000
+            response-timeout: 10s
+          routes:
+            - id: atifahCBC-auth
+              uri: lb://atifahCBC-auth
+              predicates:
+                - Path=/api/v1/auth/**
+            - id: atifahCBC-user
+              uri: lb://atifahCBC-user
+              predicates:
+                - Path=/api/v1/users/**
+            - id: atifahCBC-mood
+              uri: lb://atifahCBC-mood
+              predicates:
+                - Path=/api/v1/moods/**
+            - id: atifahCBC-analysis
+              uri: lb://atifahCBC-analysis
+              predicates:
+                - Path=/api/v1/analysis/**
+            - id: atifahCBC-community
+              uri: lb://atifahCBC-community
+              predicates:
+                - Path=/api/v1/community/**
+            - id: atifahCBC-content
+              uri: lb://atifahCBC-content
+              predicates:
+                - Path=/api/v1/contents/**
+            - id: atifahCBC-message
+              uri: lb://atifahCBC-message
+              predicates:
+                - Path=/api/v1/messages/**
+            - id: atifahCBC-message-websocket
+              uri: lb:ws://atifahCBC-message
+              predicates:
+                - Path=/ws/**
+            - id: atifahCBC-growth
+              uri: lb://atifahCBC-growth
+              predicates:
+                - Path=/api/v1/growth/**
+            - id: atifahCBC-stats
+              uri: lb://atifahCBC-stats
+              predicates:
+                - Path=/api/v1/stats/**
+            - id: atifahCBC-admin
+              uri: lb://atifahCBC-admin
+              predicates:
+                - Path=/admin/api/**
+          globalcors:
+            add-to-simple-url-handler-mapping: true
+            cors-configurations:
+              '[/**]':
+                # 生产务必收敛为具体域名：CORS_ALLOWED_ORIGINS=https://admin.example.com,https://app.example.com
+                # 不使用 Cookie 凭据，故 allow-credentials 关闭，避免与通配源组合产生安全风险
+                allowed-origin-patterns: ${CORS_ALLOWED_ORIGINS:*}
+                allowed-methods: "*"
+                allowed-headers: "*"
+                allow-credentials: false
+                max-age: 3600
+    sentinel:
+      transport:
+        dashboard: ${SENTINEL_DASHBOARD:127.0.0.1:8858}
+      eager: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: never
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+atifahCBC:
+  gateway:
+    auth:
+      # 开启后除白名单外全部要求 Bearer 令牌；管理端接口额外要求 admin 角色
+      enabled: true
+      whitelist:
+        - /api/v1/auth/
+        # 只放行存活探针与指标抓取；/actuator/gateway、/actuator/metrics 需认证
+        - /actuator/health
+        - /actuator/info
+        - /actuator/prometheus
+      admin-paths:
+        - /admin/api/
+      role-claim: role
+      admin-role: admin
+      # 浏览器 WebSocket 握手无法设置 Authorization 头，允许用 ?token= 传令牌，网关校验后剥离
+      websocket-paths:
+        - /ws/
+      token-query-param: token
+    rate-limit:
+      # 规则按路由 ID 生效；打开前先在 Sentinel 控制台确认阈值
+      enabled: false
+      rules: []
+  security:
+    jwt:
+      secret: ${JWT_SECRET:atifahCBC-dev-secret-change-me-please-32bytes}
+      issuer: atifahCBC
+      access-token-ttl: 15m
+  logging:
+    access:
+      enabled: true
+      ignore-paths:
+        - /actuator/
+      log-client-ip: true
+
+logging:
+  file:
+    # 控制台之外同时写文件；网关不导入公共 Nacos 配置，故在此单独声明
+    # 相对路径基于工作目录：JVM 从仓库根启动 → <repo>/logs；Docker 中 WORKDIR=/app → /app/logs
+    name: ${ATIFAHCBC_LOG_DIR:logs}/${spring.application.name}.log
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%X{traceId:-}] [%t] %logger{40} - %msg%n"
+    # 与 console 保持同格式；Boot 默认 file pattern 会额外带 PID 和 ---
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%X{traceId:-}] [%t] %logger{40} - %msg%n"
+  structured:
+    # 本地为空走文本 pattern；生产设置 ATIFAHCBC_LOG_FORMAT=logstash 启用 JSON
+    format:
+      console: ${ATIFAHCBC_LOG_FORMAT:}
+      # 与 console 共用开关，避免控制台 JSON、文件仍是文本
+      file: ${ATIFAHCBC_LOG_FORMAT:}
+    json:
+      context:
+        include: true
+      add:
+        service: ${spring.application.name}
+        env: ${APP_ENV:local}
+  logback:
+    rollingpolicy:
+      # 单文件 100MB，按天归档保留 30 个，备份总量上限 5GB
+      max-file-size: ${ATIFAHCBC_LOG_MAX_FILE_SIZE:100MB}
+      max-history: ${ATIFAHCBC_LOG_MAX_HISTORY:30}
+      total-size-cap: ${ATIFAHCBC_LOG_TOTAL_SIZE_CAP:5GB}
+      clean-history-on-start: false
+  level:
+    root: info
+    org.springframework.cloud.gateway: info
+    reactor.netty: warn
+    com.alibaba.nacos: warn
